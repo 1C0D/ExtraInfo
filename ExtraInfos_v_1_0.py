@@ -25,11 +25,11 @@ import bpy
 '''
 
 bl_info = {
-    "name": "ExtraInfo",
+    "name": "ExtraInfos",
     "description": "Show Extra Information in Viewport",
-    "author": "zebus3d",
-    "version": (0, 0, 3),
-    "blender": (2, 80, 0),
+    "author": "zebus3d/1C0D",
+    "version": (0, 1, 0),
+    "blender": (2, 92, 0),
     "location": "View3D",
     "wiki_url": "https://github.com/zebus3d/ExtraInfo",
     "category": "3D View" 
@@ -68,9 +68,9 @@ def draw_callback_px(self, context):
     x_offset_aTool = bpy.context.area.regions[2].width
 
     if x_offset_aTool == 1:
-        x_offset = 20 * ui_scale 
+        x_offset = 14 * ui_scale 
     else:   
-        x_offset = 20 * ui_scale + x_offset_aTool
+        x_offset = 14 * ui_scale + x_offset_aTool
 
     # esto es solo en el layaout principal pero puede cambiar:
     # TOOL_HEADER = 0
@@ -86,7 +86,6 @@ def draw_callback_px(self, context):
     
     window_height = get_region_property('WINDOW', 'height')
     # window_height = get_region_property('WINDOW', 'y')
-    # print("window.height", window_height)
     
     # normalize y offset:
     # ui_min = 0.5
@@ -111,7 +110,7 @@ def draw_callback_px(self, context):
         OldMin = 0.5
         OldMax = 2
 
-        NewMin = 35
+        NewMin = 65
         NewMax = 130
         
         OldRange = (OldMax - OldMin)
@@ -135,7 +134,7 @@ def draw_callback_px(self, context):
         OldMin = 0.5
         OldMax = 2
 
-        NewMin = 50
+        NewMin = 80
         NewMax = 180
         
         OldRange = (OldMax - OldMin)
@@ -148,12 +147,15 @@ def draw_callback_px(self, context):
             NewRange = (NewMax - NewMin)  
             y_static_offest = (((OldValue - OldMin) * NewRange) / OldRange) + NewMin
 
-    # print(y_static_offest)
-    y_offset = window_height - y_static_offest
-    # print("y_offset", y_offset)
 
+    y_offset = window_height - y_static_offest
+
+
+    preferences = bpy.context.preferences
+    addon_prefs = preferences.addons[__name__].preferences
+    inc=addon_prefs.increase_font
     fontSize = int(12 * ui_scale)
-    blf.size(font_id, fontSize, 72)
+    blf.size(font_id, fontSize, 80+inc)
     
     # shadows:
     # the level has to be 3, 5 o 0
@@ -174,27 +176,53 @@ def draw_callback_px(self, context):
     }
 
     re = 'Engine: ' + engines.get(bpy.context.scene.render.engine)
-    display.append(re)
+    if addon_prefs.show_engine:
+        display.append(re)
+    else:
+        try:
+            display.remove(re)
+        except:
+            pass
 
     view_layer = bpy.context.view_layer
     stats = bpy.context.scene.statistics(view_layer).split("|")
 
     if bpy.context.mode == 'OBJECT':
         ss = stats[2:5]
-        ss.append(stats[-2])
-        stats = ss
-    elif bpy.context.mode == 'EDIT_MESH':
-        ss = stats[1:6]
-        stats = ss
-    elif bpy.context.mode == 'SCULPT':
-        ss = stats[1:4]
-        ss.append(stats[-2])
-        stats = ss
-    else:
-        stats = []
 
-    if len(stats) > 0:
-        display = display + stats
+    elif bpy.context.mode == 'EDIT_MESH':
+        ss = stats[1:5]
+
+    elif bpy.context.mode == 'SCULPT':
+        ss = stats[1:3]
+
+    else:
+        ss = []
+
+    if addon_prefs.show_stats:
+        display = display + ss
+    else:
+        try:
+            display.remove(ss)
+        except:
+            pass
+
+    if addon_prefs.show_mem:
+        display.append(stats[-2])
+    else:
+        try:
+            display.remove(stats[-2])
+        except:
+            pass
+
+    mode = bpy.context.mode.lower().capitalize()+"_Mode"
+    if addon_prefs.show_mode:
+        display.append(mode)
+    else:
+        try:
+            display.remove(mode)
+        except:
+            pass
 
     if engines.get(bpy.context.scene.render.engine) == 'Cycles':
         area = next(area for area in bpy.context.screen.areas if area.type == 'VIEW_3D')
@@ -218,6 +246,47 @@ def draw_callback_px(self, context):
                 blf.draw(font_id, value)
 
 
+class EXTRA_PT_infos_pref(bpy.types.AddonPreferences):
+    bl_idname = __name__
+
+    increase_font: bpy.props.IntProperty(
+            name="font size",
+            default=1,
+            )
+    show_engine: bpy.props.BoolProperty(
+            name="show render engine",
+            default=False,
+            )
+    show_stats: bpy.props.BoolProperty(
+            name="show geo stats",
+            default=False,
+            )
+    show_mem: bpy.props.BoolProperty(
+            name="show mem stats",
+            default=False,
+            )
+    show_mode: bpy.props.BoolProperty(
+            name="show Mode",
+            default=False,
+            )           
+    def draw(self, context):
+        layout = self.layout
+
+        box = layout.box()
+        box.label(text='Parameters')
+        col = box.column()
+#        col.label(text='Ctrl+Shift+I : classic import modules insertion   |  Ctrl+P : print(selection) insertion')
+
+
+#        layout.prop(self, "devtool_console_toggle")
+        # layout.label(text="") #separation line
+#        layout.separator()
+        layout.prop(self, "increase_font")
+        layout.prop(self, "show_engine")
+        layout.prop(self, "show_stats")
+        layout.prop(self, "show_mem")
+        layout.prop(self, "show_mode")
+
 
 def init():
     font_info["font_id"] = 0
@@ -227,9 +296,11 @@ def init():
 
 def register():
     init()
+    bpy.utils.register_class(EXTRA_PT_infos_pref)
 
 def unregister():
-    pass
+    bpy.types.SpaceView3D.draw_handler_remove(font_info["handler"], 'WINDOW')
+    bpy.utils.unregister_class(EXTRA_PT_infos_pref)
 
 if __name__ == "__main__":
     register()
